@@ -76,6 +76,7 @@ h2 {
 
 .player-row input[type="text"] {
   flex: 2;
+  min-width: 0;
 }
 
 .player-row .caisses-input {
