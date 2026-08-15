@@ -1,0 +1,353 @@
+:root {
+  --bg: #0f1512;
+  --surface: #182019;
+  --border: #2a352c;
+  --text: #e9efe9;
+  --muted: #9aa89c;
+  --accent: #3bb273;
+  --danger: #d9534f;
+  --warning: #caa53d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 20px 16px 60px;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin-bottom: 20px;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin-top: 28px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.field-row label {
+  flex: 1;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.field-row input {
+  width: 70px;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.player-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.player-row input[type="text"] {
+  flex: 2;
+}
+
+.player-row .caisses-input {
+  flex: 1;
+  width: 60px;
+}
+
+.player-row.locked {
+  opacity: 0.9;
+}
+
+.player-name-label {
+  flex: 2;
+  padding: 8px;
+  font-weight: 500;
+}
+
+.game-row {
+  display: flex;
+  gap: 8px;
+}
+
+.game-open {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.game-title {
+  font-weight: 600;
+}
+
+.game-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.game-delete {
+  flex: 0 0 auto;
+  width: 40px;
+  border-radius: 8px;
+  border-color: var(--danger);
+  color: var(--danger);
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.remove-btn {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border-color: var(--danger);
+  color: var(--danger);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.add-btn {
+  width: 100%;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+
+button.full {
+  width: 100%;
+}
+
+.setup-choice {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.setup-choice button {
+  flex: 1;
+  padding: 16px 10px;
+  font-size: 1rem;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 0;
+}
+
+#offline-status.ready {
+  color: var(--accent);
+  margin-top: 10px;
+}
+
+.chip-type-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.chip-type-row > div {
+  flex: 1;
+}
+
+.chip-type-row label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.chip-type-row input {
+  width: 100%;
+}
+
+.chip-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.chip-card .chip-name {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.chip-inputs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+  gap: 8px;
+}
+
+.chip-inputs label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.chip-inputs input {
+  width: 100%;
+  text-align: center;
+}
+
+.chip-total {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: right;
+}
+
+input[type="text"], input[type="number"] {
+  background: #0f1512;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 1rem;
+}
+
+button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0f1512;
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.warning {
+  background: rgba(202, 165, 61, 0.15);
+  border: 1px solid var(--warning);
+  color: var(--warning);
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.results-pager {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.results-pager button {
+  width: 44px;
+  height: 40px;
+  font-size: 1.1rem;
+}
+
+.results-pager button:last-child {
+  justify-self: end;
+}
+
+#page-label {
+  text-align: center;
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.results-table th, .results-table td {
+  padding: 8px 6px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+}
+
+.results-table th:first-child, .results-table td:first-child {
+  text-align: left;
+}
+
+.positive {
+  color: var(--accent);
+}
+
+.negative {
+  color: var(--danger);
+}
+
+#settlement-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0;
+}
+
+#settlement-list li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+#settlement-list li strong {
+  color: var(--accent);
+}

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+  <title>Campfire Poker</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0f1512" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Campfire Poker" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+</head>
+<body>
+  <div class="app">
+    <h1>Campfire Poker</h1>
+
+    <!-- STEP 0: Home -->
+    <section id="step-home" class="step">
+      <button id="btn-new-game" class="primary full">New Game</button>
+      <p id="offline-status" class="hint hidden">Ready for offline use</p>
+
+      <h2>Your Games</h2>
+      <div id="games-list" class="rows"></div>
+      <p id="no-games-hint" class="hint hidden">No games saved yet.</p>
+    </section>
+
+    <!-- STEP 0.5: Caisse setup choice -->
+    <section id="step-setup" class="step hidden">
+      <div class="setup-choice">
+        <button id="btn-classic" class="primary">Classic</button>
+        <button id="btn-custom">Custom</button>
+      </div>
+
+      <div class="actions">
+        <button id="btn-setup-back">Back</button>
+      </div>
+    </section>
+
+    <!-- STEP 0.75: Custom caisse setup -->
+    <section id="step-custom" class="step hidden">
+      <p class="hint">Define the chips in one caisse.</p>
+      <div id="chip-type-rows" class="rows"></div>
+      <button id="btn-add-chip-type" class="add-btn">+ Add Chip Type</button>
+
+      <div class="field-row">
+        <label for="real-per-caisse">Real $ per caisse</label>
+        <input type="number" id="real-per-caisse" min="0" step="0.01" value="2" />
+      </div>
+
+      <div class="actions">
+        <button id="btn-cancel-custom">Back</button>
+        <button id="btn-confirm-custom" class="primary">Continue</button>
+      </div>
+    </section>
+
+    <!-- STEP 1: Players & buy-ins -->
+    <section id="step-players" class="step hidden">
+      <p id="players-hint" class="hint hidden"></p>
+      <div id="player-rows" class="rows"></div>
+
+      <button id="btn-add-player" class="add-btn">+ Add Player</button>
+
+      <div class="actions">
+        <button id="btn-back-to-setup">Back</button>
+        <button id="btn-to-chips" class="primary">Next</button>
+      </div>
+    </section>
+
+    <!-- STEP 2: Final chip counts -->
+    <section id="step-chips" class="step hidden">
+      <p class="hint">Enter how many of each chip every player has at the end.</p>
+      <div id="chip-rows" class="rows"></div>
+
+      <div id="chips-warning-banner" class="warning hidden"></div>
+
+      <div class="actions">
+        <button id="btn-back-to-players">Back</button>
+        <button id="btn-calculate" class="primary">Calculate Settlement</button>
+      </div>
+    </section>
+
+    <!-- STEP 3: Results -->
+    <section id="step-results" class="step hidden">
+      <div class="results-pager">
+        <button type="button" id="btn-page-prev" title="Previous">&larr;</button>
+        <span id="page-label">Total</span>
+        <button type="button" id="btn-page-next" title="Next">&rarr;</button>
+      </div>
+
+      <div id="warning-banner" class="warning hidden"></div>
+
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Caisses</th>
+            <th>Paid In</th>
+            <th>Final Chips</th>
+            <th>Final $</th>
+            <th>Net</th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+
+      <h2>Who Pays Who</h2>
+      <ul id="settlement-list"></ul>
+
+      <div class="actions">
+        <button id="btn-new-round">Start New Round</button>
+        <button id="btn-close-game" class="primary">Close Game</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
