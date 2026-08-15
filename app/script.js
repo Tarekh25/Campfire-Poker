@@ -301,9 +301,17 @@ function addPlayerRow({ name = "", caisses = 1, locked = false } = {}) {
 
   row.innerHTML = `
     ${nameHtml}
-    <input type="number" class="caisses-input" min="0" value="${caisses}" title="${caissesTitle}" />
+    <div class="stepper">
+      <button type="button" class="step-btn step-minus" title="Decrease caisses">&minus;</button>
+      <input type="number" class="caisses-input" min="0" value="${caisses}" title="${caissesTitle}" />
+      <button type="button" class="step-btn step-plus" title="Increase caisses">+</button>
+    </div>
     ${removeBtnHtml}
   `;
+
+  const caissesInput = row.querySelector(".caisses-input");
+  row.querySelector(".step-minus").addEventListener("click", () => stepCaisses(caissesInput, -1));
+  row.querySelector(".step-plus").addEventListener("click", () => stepCaisses(caissesInput, 1));
 
   if (!locked) {
     row.querySelector(".remove-btn").addEventListener("click", () => removePlayerRow(row));
@@ -311,6 +319,13 @@ function addPlayerRow({ name = "", caisses = 1, locked = false } = {}) {
   playerRows.appendChild(row);
 
   updateRemoveButtons();
+}
+
+function stepCaisses(input, delta) {
+  const min = parseInt(input.min, 10) || 0;
+  const current = parseInt(input.value, 10) || 0;
+  input.value = Math.max(min, current + delta);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 function removePlayerRow(row) {
