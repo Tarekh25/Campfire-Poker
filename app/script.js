@@ -373,6 +373,16 @@ function startNewRound(game) {
 
 function goToChipsStep() {
   const rows = playerRows.querySelectorAll(".player-row");
+
+  for (const row of rows) {
+    const caissesInput = row.querySelector(".caisses-input");
+    if (parseInt(caissesInput.value, 10) < 0) {
+      alert("Caisses can't be negative. Please enter 0 or more.");
+      caissesInput.focus();
+      return;
+    }
+  }
+
   players = [];
   rows.forEach((row, i) => {
     const nameInput = row.querySelector(".name-input");
