@@ -642,7 +642,6 @@ function renderResultsTable(results) {
       <td>${r.name}</td>
       <td>${r.caisses}</td>
       <td>$${r.paidIn.toFixed(2)}</td>
-      <td>$${r.chipFaceValue.toFixed(2)}</td>
       <td>$${r.finalReal.toFixed(2)}</td>
       <td class="${netClass}">${netSign}$${Math.abs(r.net).toFixed(2)}</td>
     `;

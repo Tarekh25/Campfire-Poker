@@ -1,4 +1,4 @@
-const CACHE_NAME = "campfire-poker-v6";
+const CACHE_NAME = "campfire-poker-v7";
 const ASSETS = [
   "./",
   "./index.html",
