@@ -389,7 +389,7 @@ function goToChipsStep() {
       return;
     }
     if (!(caisses > 0)) {
-      alert("Every player needs at least 1 caisse. Please update the count before continuing.");
+      alert("Every player needs at least 1 caisse.");
       caissesInput.focus();
       return;
     }
