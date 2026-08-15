@@ -27,6 +27,7 @@ const state = {
   roundMode: false, // true while entering a new round for an existing game
   resultPages: [],
   currentPageIndex: 0,
+  editingRoundIndex: null, // index into currentGame.rounds while editing a past round, else null
 };
 
 const stepHome = document.getElementById("step-home");
@@ -60,12 +61,19 @@ document.getElementById("btn-setup-back").addEventListener("click", goHome);
 document.getElementById("btn-add-player").addEventListener("click", () => addPlayerRow());
 document.getElementById("btn-back-to-setup").addEventListener("click", backFromPlayers);
 document.getElementById("btn-to-chips").addEventListener("click", goToChipsStep);
-document.getElementById("btn-back-to-players").addEventListener("click", () => showStep(stepPlayers));
-document.getElementById("btn-calculate").addEventListener("click", attemptCalculate);
+document.getElementById("btn-back-to-players").addEventListener("click", backFromChips);
+document.getElementById("btn-calculate").addEventListener("click", () => {
+  if (state.editingRoundIndex !== null) attemptSaveRoundEdit();
+  else attemptCalculate();
+});
 document.getElementById("btn-new-round").addEventListener("click", () => startNewRound(state.currentGame));
 document.getElementById("btn-close-game").addEventListener("click", closeCurrentGame);
 document.getElementById("btn-page-prev").addEventListener("click", () => showResultsPage(state.currentPageIndex - 1));
 document.getElementById("btn-page-next").addEventListener("click", () => showResultsPage(state.currentPageIndex + 1));
+document.getElementById("btn-edit-round").addEventListener("click", () => {
+  const page = state.resultPages[state.currentPageIndex];
+  if (page && page.roundIndex !== undefined) startEditRound(page.roundIndex);
+});
 
 function showStep(step) {
   [stepHome, stepSetup, stepCustom, stepPlayers, stepChips, stepResults].forEach((s) => s.classList.add("hidden"));
@@ -124,6 +132,8 @@ function goHome() {
   state.players = [];
   state.chipConfig = null;
   state.lastChipRowsKey = null;
+  state.editingRoundIndex = null;
+  document.getElementById("btn-calculate").textContent = "Calculate Settlement";
   playerRows.innerHTML = "";
   chipRows.innerHTML = "";
   chipTypeRows.innerHTML = "";
@@ -193,6 +203,8 @@ function startNewGame() {
   state.players = [];
   state.chipConfig = null;
   state.lastChipRowsKey = null;
+  state.editingRoundIndex = null;
+  document.getElementById("btn-calculate").textContent = "Calculate Settlement";
   playerRows.innerHTML = "";
   chipRows.innerHTML = "";
   chipTypeRows.innerHTML = "";
@@ -221,11 +233,11 @@ function addChipTypeRow() {
   row.innerHTML = `
     <div>
       <label>Value ($)</label>
-      <input type="number" class="chip-value-input" min="0.01" step="0.01" value="1" />
+      <input type="number" inputmode="decimal" class="chip-value-input" min="0.01" step="0.01" value="1" />
     </div>
     <div>
       <label>Qty per caisse</label>
-      <input type="number" class="chip-qty-input" min="1" value="1" />
+      <input type="number" inputmode="numeric" class="chip-qty-input" min="1" value="1" />
     </div>
     <button type="button" class="remove-btn hidden" title="Remove chip type" aria-label="Remove chip type">&minus;</button>
   `;
@@ -320,7 +332,7 @@ function addPlayerRow({ name = "", caisses = 1, locked = false } = {}) {
     ${nameHtml}
     <div class="stepper">
       <button type="button" class="step-btn step-minus" title="Decrease caisses" aria-label="Decrease caisses">&minus;</button>
-      <input type="number" class="caisses-input" min="0" value="${caisses}" title="${caissesTitle}" />
+      <input type="number" inputmode="numeric" class="caisses-input" min="0" value="${caisses}" title="${caissesTitle}" />
       <button type="button" class="step-btn step-plus" title="Increase caisses" aria-label="Increase caisses">+</button>
     </div>
     ${removeBtnHtml}
@@ -377,37 +389,56 @@ function startNewRound(game) {
 
 // ---------- Chips step ----------
 
-function goToChipsStep() {
-  const rows = playerRows.querySelectorAll(".player-row");
+function backFromChips() {
+  if (state.editingRoundIndex !== null) {
+    cancelEditRound();
+  } else {
+    showStep(stepPlayers);
+  }
+}
 
-  for (const row of rows) {
+function goToChipsStep() {
+  const rows = Array.from(playerRows.querySelectorAll(".player-row"));
+
+  const resolved = rows.map((row, i) => {
+    const nameInput = row.querySelector(".name-input");
+    const label = row.querySelector(".player-name-label");
+    const name = nameInput ? nameInput.value.trim() || `Player ${i + 1}` : label.textContent;
     const caissesInput = row.querySelector(".caisses-input");
     const caisses = parseInt(caissesInput.value, 10);
-    if (caisses < 0) {
+    return { nameInput, name, caissesInput, caisses };
+  });
+
+  for (const p of resolved) {
+    if (p.caisses < 0) {
       alert("Caisses can't be negative. Please enter 0 or more.");
-      caissesInput.focus();
+      p.caissesInput.focus();
       return;
     }
-    if (!(caisses > 0)) {
+    if (!(p.caisses > 0)) {
       alert("Every player needs at least 1 caisse.");
-      caissesInput.focus();
+      p.caissesInput.focus();
       return;
     }
   }
 
-  state.players = [];
-  rows.forEach((row, i) => {
-    const nameInput = row.querySelector(".name-input");
-    const label = row.querySelector(".player-name-label");
-    const name = nameInput ? nameInput.value.trim() || `Player ${i + 1}` : label.textContent;
-    const roundCaisses = parseInt(row.querySelector(".caisses-input").value, 10) || 0;
-
-    let totalCaisses = roundCaisses;
-    if (state.roundMode) {
-      const existing = state.currentGame.players.find((p) => p.name === name);
-      totalCaisses = (existing ? existing.totalCaisses : 0) + roundCaisses;
+  const seenNames = new Set();
+  for (const p of resolved) {
+    if (seenNames.has(p.name)) {
+      alert(`"${p.name}" is used by more than one player. Player names must be unique.`);
+      if (p.nameInput) p.nameInput.focus();
+      return;
     }
-    state.players.push({ name, caisses: totalCaisses, roundCaisses });
+    seenNames.add(p.name);
+  }
+
+  state.players = resolved.map((p) => {
+    let totalCaisses = p.caisses;
+    if (state.roundMode) {
+      const existing = state.currentGame.players.find((ep) => ep.name === p.name);
+      totalCaisses = (existing ? existing.totalCaisses : 0) + p.caisses;
+    }
+    return { name: p.name, caisses: totalCaisses, roundCaisses: p.caisses };
   });
 
   const key = state.players.map((p) => p.name).join("|");
@@ -419,9 +450,12 @@ function goToChipsStep() {
   showStep(stepChips);
 }
 
-function buildChipRows() {
+// initialCounts, if given, is an array parallel to state.players — each entry is an
+// array of chip counts (by type index) to prefill, used when re-opening a past round.
+function buildChipRows(initialCounts = null) {
   chipRows.innerHTML = "";
   state.players.forEach((player, i) => {
+    const counts = (initialCounts && initialCounts[i]) || [];
     const card = document.createElement("div");
     card.className = "chip-card";
     card.dataset.playerIndex = i;
@@ -430,7 +464,7 @@ function buildChipRows() {
       (type, j) => `
         <div>
           <label>${type.label}</label>
-          <input type="number" class="chip-input" data-chip-index="${j}" min="0" value="0" />
+          <input type="number" inputmode="numeric" class="chip-input" data-chip-index="${j}" min="0" value="${counts[j] || 0}" />
         </div>`
     ).join("");
 
@@ -444,6 +478,7 @@ function buildChipRows() {
 
     const chipInputs = card.querySelectorAll(".chip-input");
     const totalLabel = card.querySelector(".chip-total");
+    totalLabel.textContent = `Value: $${getChipTotalFromCard(card).toFixed(2)}`;
     chipInputs.forEach((input) => {
       input.addEventListener("input", () => {
         const total = getChipTotalFromCard(card);
@@ -463,6 +498,16 @@ function getChipTotalFromCard(card) {
     total += count * state.chipConfig.types[idx].value;
   });
   return total;
+}
+
+function getChipCountsFromCard(card) {
+  const chipInputs = card.querySelectorAll(".chip-input");
+  const counts = [];
+  chipInputs.forEach((input) => {
+    const idx = parseInt(input.dataset.chipIndex, 10);
+    counts[idx] = parseInt(input.value, 10) || 0;
+  });
+  return counts;
 }
 
 // ---------- Results ----------
@@ -493,6 +538,7 @@ function calculateAndShowResults() {
   const results = state.players.map((player, i) => {
     const card = cards[i];
     const chipFaceValue = getChipTotalFromCard(card); // this round's ending pot
+    const chipCounts = getChipCountsFromCard(card); // per-type breakdown, kept so the round can be re-edited later
     const paidIn = player.caisses * state.chipConfig.realPerCaisse; // lifetime paid in (informational)
     const finalReal = chipValueToReal(chipFaceValue, state.chipConfig); // this round's pot in real $
 
@@ -508,6 +554,7 @@ function calculateAndShowResults() {
       caisses: player.caisses,
       roundCaisses: player.roundCaisses,
       chipFaceValue,
+      chipCounts,
       paidIn,
       finalReal,
       roundPaidIn,
@@ -551,12 +598,74 @@ function commitResultsToGame(results) {
       caisses: r.roundCaisses,
       paidIn: r.roundPaidIn,
       chipFaceValue: r.chipFaceValue,
+      chipCounts: r.chipCounts,
       finalReal: r.finalReal,
       net: r.roundNet,
     })),
   });
   state.currentGame.roundNumber = (state.currentGame.roundNumber || 0) + 1;
   state.currentGame.updatedAt = Date.now();
+}
+
+// ---------- Edit a past round ----------
+
+function startEditRound(roundIndex) {
+  const game = state.currentGame;
+  const round = game.rounds[roundIndex];
+
+  state.editingRoundIndex = roundIndex;
+  state.chipConfig = game.chipConfig;
+  state.players = round.players.map((rp) => ({ name: rp.name, roundCaisses: rp.caisses }));
+
+  document.getElementById("btn-calculate").textContent = "Save Round";
+  buildChipRows(round.players.map((rp) => rp.chipCounts || []));
+  chipsWarningBanner.classList.add("hidden");
+  showStep(stepChips);
+}
+
+function cancelEditRound() {
+  state.editingRoundIndex = null;
+  document.getElementById("btn-calculate").textContent = "Calculate Settlement";
+  renderResultsFromGame(state.currentGame);
+  showStep(stepResults);
+}
+
+function attemptSaveRoundEdit() {
+  const cards = chipRows.querySelectorAll(".chip-card");
+  let totalRoundCaisses = 0;
+  let totalChipValue = 0;
+  state.players.forEach((player, i) => {
+    totalRoundCaisses += player.roundCaisses;
+    totalChipValue += getChipTotalFromCard(cards[i]);
+  });
+
+  const { isOff, message } = computeChipDiscrepancy(totalRoundCaisses, totalChipValue, state.chipConfig.caisseFaceValue);
+  if (isOff) {
+    chipsWarningBanner.textContent = `${message} Fix the counts before saving.`;
+    chipsWarningBanner.classList.remove("hidden");
+    return;
+  }
+  chipsWarningBanner.classList.add("hidden");
+
+  const round = state.currentGame.rounds[state.editingRoundIndex];
+  state.players.forEach((player, i) => {
+    const card = cards[i];
+    const rp = round.players.find((p) => p.name === player.name);
+    rp.chipFaceValue = getChipTotalFromCard(card);
+    rp.chipCounts = getChipCountsFromCard(card);
+  });
+
+  recomputeGameDerived(state.currentGame);
+  state.currentGame.updatedAt = Date.now();
+  upsertGame(state.currentGame);
+
+  const editedIndex = state.editingRoundIndex;
+  state.editingRoundIndex = null;
+  document.getElementById("btn-calculate").textContent = "Calculate Settlement";
+
+  state.resultPages = buildResultPages(state.currentGame);
+  showResultsPage(editedIndex);
+  showStep(stepResults);
 }
 
 // ---------- Results pager (Round 1, Round 2, ..., Results) ----------
@@ -579,9 +688,12 @@ function buildTotalResultsPage(game, label) {
 function buildResultPages(game) {
   const rounds = game.rounds || [];
 
-  // Only one round played: no need to page between round-vs-total, just the result.
+  // Only one round played: no need to page between round-vs-total, just the result —
+  // but it's still tagged as editable, since it's the only round there is.
   if (rounds.length <= 1) {
-    return [buildTotalResultsPage(game, "Result")];
+    const page = buildTotalResultsPage(game, "Result");
+    if (rounds.length === 1) page.roundIndex = 0;
+    return [page];
   }
 
   const pages = rounds.map((round, i) => {
@@ -593,6 +705,7 @@ function buildResultPages(game) {
       showWarning: true,
       warningCaisses: roundCaissesTotal,
       warningChipValue: chipValueTotal,
+      roundIndex: i,
     };
   });
 
@@ -609,6 +722,7 @@ function showResultsPage(index) {
   const showArrows = state.resultPages.length > 1;
   document.getElementById("btn-page-prev").classList.toggle("hidden", !showArrows);
   document.getElementById("btn-page-next").classList.toggle("hidden", !showArrows);
+  document.getElementById("btn-edit-round").classList.toggle("hidden", page.roundIndex === undefined);
 
   if (page.showWarning) {
     renderWarning(page.warningCaisses, page.warningChipValue, state.currentGame.chipConfig.caisseFaceValue);

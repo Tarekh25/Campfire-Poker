@@ -71,9 +71,55 @@ function simplifyDebts(results) {
   return transactions;
 }
 
+// Recomputes every derived field (paidIn, finalReal, net, and each player's cumulative
+// totals) from the raw per-round inputs (caisses + chipFaceValue) stored in game.rounds.
+// This is what makes editing a past round safe: change one round's chip counts, call
+// this, and every round's numbers plus the running cumulative net are consistent again —
+// there's no separate "patch the totals" logic that could drift out of sync.
+// Mutates round-player objects and game.players in place, matching how the rest of the
+// app treats a game object (see commitResultsToGame).
+function recomputeGameDerived(game) {
+  const cumulative = {}; // name -> { totalCaisses, cumulativeNet, lastChipValue, lastRoundCaisses }
+
+  game.rounds.forEach((round) => {
+    round.players.forEach((rp) => {
+      const prev = cumulative[rp.name] || { totalCaisses: 0, cumulativeNet: 0 };
+      const paidIn = rp.caisses * game.chipConfig.realPerCaisse;
+      const finalReal = chipValueToReal(rp.chipFaceValue, game.chipConfig);
+      const net = finalReal - paidIn;
+
+      rp.paidIn = paidIn;
+      rp.finalReal = finalReal;
+      rp.net = net;
+
+      cumulative[rp.name] = {
+        totalCaisses: prev.totalCaisses + rp.caisses,
+        cumulativeNet: prev.cumulativeNet + net,
+        lastChipValue: rp.chipFaceValue,
+        lastRoundCaisses: rp.caisses,
+      };
+    });
+  });
+
+  game.players = game.players.map((p) => {
+    const c = cumulative[p.name];
+    return c
+      ? { ...p, totalCaisses: c.totalCaisses, lastChipValue: c.lastChipValue, lastRoundCaisses: c.lastRoundCaisses, cumulativeNet: c.cumulativeNet }
+      : p;
+  });
+}
+
 // `module` doesn't exist in the browser, so this block only runs under Node —
 // it lets calc.test.js `require()` these functions while the browser keeps
 // using them as plain globals loaded via <script>.
 if (typeof module !== "undefined") {
-  module.exports = { escapeHtml, formatChipLabel, buildChipConfig, computeChipDiscrepancy, chipValueToReal, simplifyDebts };
+  module.exports = {
+    escapeHtml,
+    formatChipLabel,
+    buildChipConfig,
+    computeChipDiscrepancy,
+    chipValueToReal,
+    simplifyDebts,
+    recomputeGameDerived,
+  };
 }

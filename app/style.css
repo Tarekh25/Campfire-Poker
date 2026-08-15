@@ -338,6 +338,14 @@ button:disabled {
   font-size: 1.05rem;
 }
 
+#btn-edit-round {
+  width: 100%;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+}
+
 .results-table {
   width: 100%;
   border-collapse: collapse;

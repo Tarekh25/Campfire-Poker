@@ -47,7 +47,7 @@
 
       <div class="field-row">
         <label for="real-per-caisse">Real $ per caisse</label>
-        <input type="number" id="real-per-caisse" min="0" step="0.01" value="2" />
+        <input type="number" inputmode="decimal" id="real-per-caisse" min="0" step="0.01" value="2" />
       </div>
 
       <div class="actions">
@@ -89,6 +89,8 @@
         <span id="page-label">Total</span>
         <button type="button" id="btn-page-next" title="Next" aria-label="Next page">&rarr;</button>
       </div>
+
+      <button type="button" id="btn-edit-round" class="hidden">Edit This Round's Chip Counts</button>
 
       <div id="warning-banner" class="warning hidden"></div>
 

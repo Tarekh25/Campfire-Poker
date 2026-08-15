@@ -7,6 +7,7 @@ const {
   computeChipDiscrepancy,
   chipValueToReal,
   simplifyDebts,
+  recomputeGameDerived,
 } = require("./calc.js");
 
 test("escapeHtml neutralizes markup and quotes", () => {
@@ -84,4 +85,62 @@ test("simplifyDebts returns no transactions when everyone is even", () => {
     { name: "Bob", net: 0.0005 }, // within the 0.001 rounding tolerance
   ];
   assert.deepEqual(simplifyDebts(results), []);
+});
+
+function makeTwoRoundGame() {
+  // Classic caisse: $10 face value per caisse, $2 real per caisse.
+  const chipConfig = { realPerCaisse: 2, caisseFaceValue: 10 };
+  return {
+    chipConfig,
+    players: [
+      { name: "Alice", totalCaisses: 0, lastChipValue: 0, lastRoundCaisses: 0, cumulativeNet: 0 },
+      { name: "Bob", totalCaisses: 0, lastChipValue: 0, lastRoundCaisses: 0, cumulativeNet: 0 },
+    ],
+    rounds: [
+      {
+        players: [
+          { name: "Alice", caisses: 2, chipFaceValue: 20 }, // even: paid $4, got $4 back
+          { name: "Bob", caisses: 1, chipFaceValue: 10 }, // even: paid $2, got $2 back
+        ],
+      },
+      {
+        players: [
+          { name: "Alice", caisses: 1, chipFaceValue: 30 }, // paid $2, got $6 back -> +$4
+          { name: "Bob", caisses: 1, chipFaceValue: 0 }, // paid $2, got $0 back -> -$2
+        ],
+      },
+    ],
+  };
+}
+
+test("recomputeGameDerived matches values already correct for an unedited game", () => {
+  const game = makeTwoRoundGame();
+  recomputeGameDerived(game);
+
+  assert.equal(game.rounds[0].players[0].net, 0);
+  assert.equal(game.rounds[1].players[0].net, 4);
+  assert.equal(game.rounds[1].players[1].net, -2);
+
+  const alice = game.players.find((p) => p.name === "Alice");
+  const bob = game.players.find((p) => p.name === "Bob");
+  assert.equal(alice.cumulativeNet, 4); // 0 + 4
+  assert.equal(bob.cumulativeNet, -2); // 0 + -2
+  assert.equal(alice.totalCaisses, 3);
+  assert.equal(bob.totalCaisses, 2);
+});
+
+test("recomputeGameDerived propagates an edit to a past round through later cumulative totals", () => {
+  const game = makeTwoRoundGame();
+
+  // Alice actually had $40 in chips at the end of round 1, not $20 — a mis-entry is fixed.
+  game.rounds[0].players[0].chipFaceValue = 40;
+  recomputeGameDerived(game);
+
+  // Round 1: finalReal = 40 * (2/10) = 8, paidIn = 2*2 = 4 -> net +4 (was 0 before the edit)
+  assert.equal(game.rounds[0].players[0].net, 4);
+  // Round 2's own net is untouched by the edit (+4, same as before)
+  assert.equal(game.rounds[1].players[0].net, 4);
+  // But the cumulative total must reflect the edit propagating forward: 4 + 4 = 8
+  const alice = game.players.find((p) => p.name === "Alice");
+  assert.equal(alice.cumulativeNet, 8);
 });
