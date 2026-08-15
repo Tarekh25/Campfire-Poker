@@ -14,12 +14,20 @@ const MAX_CHIP_TYPES = 10;
 
 const GAMES_STORAGE_KEY = "campfirePokerGames";
 
-let players = []; // [{ name, caisses (cumulative total), roundCaisses (this round only) }]
-let chipConfig = null; // { types: [{ value, qty, label }], realPerCaisse, caisseFaceValue }
-let lastChipRowsKey = null; // tracks what buildChipRows() was last built from
-let games = []; // saved games, loaded from localStorage
-let currentGame = null; // { id, createdAt, updatedAt, chipConfig, players: [{name, totalCaisses, lastChipValue, lastRoundCaisses}], roundNumber }
-let roundMode = false; // true while entering a new round for an existing game
+// Bump when a saved game's shape changes in a way old data won't already have.
+// Lets future code branch on game.schemaVersion to migrate old localStorage data.
+const SCHEMA_VERSION = 1;
+
+const state = {
+  players: [], // [{ name, caisses (cumulative total), roundCaisses (this round only) }]
+  chipConfig: null, // { types: [{ value, qty, label }], realPerCaisse, caisseFaceValue }
+  lastChipRowsKey: null, // tracks what buildChipRows() was last built from
+  games: [], // saved games, loaded from localStorage
+  currentGame: null, // { id, createdAt, updatedAt, schemaVersion, chipConfig, players, rounds, roundNumber }
+  roundMode: false, // true while entering a new round for an existing game
+  resultPages: [],
+  currentPageIndex: 0,
+};
 
 const stepHome = document.getElementById("step-home");
 const stepSetup = document.getElementById("step-setup");
@@ -54,10 +62,10 @@ document.getElementById("btn-back-to-setup").addEventListener("click", backFromP
 document.getElementById("btn-to-chips").addEventListener("click", goToChipsStep);
 document.getElementById("btn-back-to-players").addEventListener("click", () => showStep(stepPlayers));
 document.getElementById("btn-calculate").addEventListener("click", attemptCalculate);
-document.getElementById("btn-new-round").addEventListener("click", () => startNewRound(currentGame));
+document.getElementById("btn-new-round").addEventListener("click", () => startNewRound(state.currentGame));
 document.getElementById("btn-close-game").addEventListener("click", closeCurrentGame);
-document.getElementById("btn-page-prev").addEventListener("click", () => showResultsPage(currentPageIndex - 1));
-document.getElementById("btn-page-next").addEventListener("click", () => showResultsPage(currentPageIndex + 1));
+document.getElementById("btn-page-prev").addEventListener("click", () => showResultsPage(state.currentPageIndex - 1));
+document.getElementById("btn-page-next").addEventListener("click", () => showResultsPage(state.currentPageIndex + 1));
 
 function showStep(step) {
   [stepHome, stepSetup, stepCustom, stepPlayers, stepChips, stepResults].forEach((s) => s.classList.add("hidden"));
@@ -71,10 +79,21 @@ function generateId() {
   return `game-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Fills in defaults for fields that didn't exist in older saved games, so a
+// schema change here doesn't break games already sitting in someone's browser.
+function normalizeGame(game) {
+  return {
+    schemaVersion: 0,
+    rounds: [],
+    ...game,
+  };
+}
+
 function loadGames() {
   try {
     const raw = localStorage.getItem(GAMES_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const list = raw ? JSON.parse(raw) : [];
+    return list.map(normalizeGame);
   } catch {
     return [];
   }
@@ -100,11 +119,11 @@ function deleteGameById(id) {
 // ---------- Home screen ----------
 
 function goHome() {
-  currentGame = null;
-  roundMode = false;
-  players = [];
-  chipConfig = null;
-  lastChipRowsKey = null;
+  state.currentGame = null;
+  state.roundMode = false;
+  state.players = [];
+  state.chipConfig = null;
+  state.lastChipRowsKey = null;
   playerRows.innerHTML = "";
   chipRows.innerHTML = "";
   chipTypeRows.innerHTML = "";
@@ -113,16 +132,16 @@ function goHome() {
 }
 
 function renderGamesList() {
-  games = loadGames();
+  state.games = loadGames();
   gamesListEl.innerHTML = "";
 
-  if (games.length === 0) {
+  if (state.games.length === 0) {
     noGamesHint.classList.remove("hidden");
     return;
   }
   noGamesHint.classList.add("hidden");
 
-  const sorted = [...games].sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
+  const sorted = [...state.games].sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
   sorted.forEach((game) => {
     const row = document.createElement("div");
     row.className = "game-row";
@@ -136,7 +155,7 @@ function renderGamesList() {
         <span class="game-title">${dateStr}</span>
         <span class="game-meta">Round ${game.roundNumber} &middot; ${game.players.length} players</span>
       </button>
-      <button type="button" class="game-delete" title="Delete game">&times;</button>
+      <button type="button" class="game-delete" title="Delete game" aria-label="Delete game">&times;</button>
     `;
     row.querySelector(".game-open").addEventListener("click", () => openGame(game.id));
     row.querySelector(".game-delete").addEventListener("click", (e) => {
@@ -148,7 +167,7 @@ function renderGamesList() {
 }
 
 function confirmDeleteGame(id) {
-  const game = games.find((g) => g.id === id);
+  const game = state.games.find((g) => g.id === id);
   if (!game) return;
   const dateStr = new Date(game.createdAt).toLocaleDateString();
   if (!window.confirm(`Delete the game from ${dateStr}? This can't be undone.`)) return;
@@ -157,43 +176,32 @@ function confirmDeleteGame(id) {
 }
 
 function openGame(id) {
-  const game = games.find((g) => g.id === id);
+  const game = state.games.find((g) => g.id === id);
   if (!game) return;
-  currentGame = JSON.parse(JSON.stringify(game));
-  chipConfig = currentGame.chipConfig;
-  roundMode = false;
-  renderResultsFromGame(currentGame);
+  state.currentGame = JSON.parse(JSON.stringify(game));
+  state.chipConfig = state.currentGame.chipConfig;
+  state.roundMode = false;
+  renderResultsFromGame(state.currentGame);
   showStep(stepResults);
 }
 
 // ---------- New game / caisse setup ----------
 
 function startNewGame() {
-  currentGame = null;
-  roundMode = false;
-  players = [];
-  chipConfig = null;
-  lastChipRowsKey = null;
+  state.currentGame = null;
+  state.roundMode = false;
+  state.players = [];
+  state.chipConfig = null;
+  state.lastChipRowsKey = null;
   playerRows.innerHTML = "";
   chipRows.innerHTML = "";
   chipTypeRows.innerHTML = "";
   showStep(stepSetup);
 }
 
-function formatChipLabel(value) {
-  if (value >= 1) return `$${parseFloat(value.toFixed(2))}`;
-  return `${Math.round(value * 100)}c`;
-}
-
-function buildChipConfig(types, realPerCaisse) {
-  const withLabels = types.map((t) => ({ ...t, label: formatChipLabel(t.value) }));
-  const caisseFaceValue = withLabels.reduce((sum, t) => sum + t.value * t.qty, 0);
-  return { types: withLabels, realPerCaisse, caisseFaceValue };
-}
-
 function chooseClassic() {
-  chipConfig = buildChipConfig(CLASSIC_CHIP_TYPES, DEFAULT_REAL_PER_CAISSE);
-  lastChipRowsKey = null;
+  state.chipConfig = buildChipConfig(CLASSIC_CHIP_TYPES, DEFAULT_REAL_PER_CAISSE);
+  state.lastChipRowsKey = null;
   proceedToPlayers();
 }
 
@@ -219,7 +227,7 @@ function addChipTypeRow() {
       <label>Qty per caisse</label>
       <input type="number" class="chip-qty-input" min="1" value="1" />
     </div>
-    <button type="button" class="remove-btn hidden" title="Remove chip type">&minus;</button>
+    <button type="button" class="remove-btn hidden" title="Remove chip type" aria-label="Remove chip type">&minus;</button>
   `;
   row.querySelector(".remove-btn").addEventListener("click", () => removeChipTypeRow(row));
   chipTypeRows.appendChild(row);
@@ -233,12 +241,19 @@ function removeChipTypeRow(row) {
   updateChipTypeRemoveButtons();
 }
 
-function updateChipTypeRemoveButtons() {
-  const rows = chipTypeRows.querySelectorAll(".chip-type-row");
-  const showRemove = rows.length >= 2;
+// Shared by the player rows and the chip type rows: toggles each row's
+// remove button based on whatever visibility rule the caller passes in.
+function setRemoveButtonsVisible(rows, shouldShow) {
   rows.forEach((row) => {
-    row.querySelector(".remove-btn").classList.toggle("hidden", !showRemove);
+    const btn = row.querySelector(".remove-btn");
+    if (btn) btn.classList.toggle("hidden", !shouldShow(row));
   });
+}
+
+function updateChipTypeRemoveButtons() {
+  const rows = Array.from(chipTypeRows.querySelectorAll(".chip-type-row"));
+  const showRemove = rows.length >= 2;
+  setRemoveButtonsVisible(rows, () => showRemove);
 }
 
 function confirmCustomSetup() {
@@ -250,8 +265,8 @@ function confirmCustomSetup() {
   });
 
   const realPerCaisse = parseFloat(realPerCaisseInput.value) || 0;
-  chipConfig = buildChipConfig(types, realPerCaisse);
-  lastChipRowsKey = null;
+  state.chipConfig = buildChipConfig(types, realPerCaisse);
+  state.lastChipRowsKey = null;
   proceedToPlayers();
 }
 
@@ -267,7 +282,7 @@ function proceedToPlayers() {
 // ---------- Players step ----------
 
 function updatePlayersHint() {
-  if (roundMode) {
+  if (state.roundMode) {
     playersHint.textContent =
       "Existing players are locked in from before — enter their caisses for this round only. " +
       "You can add new players, but not remove or rename existing ones.";
@@ -278,8 +293,8 @@ function updatePlayersHint() {
 }
 
 function backFromPlayers() {
-  if (roundMode && currentGame) {
-    renderResultsFromGame(currentGame);
+  if (state.roundMode && state.currentGame) {
+    renderResultsFromGame(state.currentGame);
     showStep(stepResults);
   } else {
     showStep(stepSetup);
@@ -293,18 +308,20 @@ function addPlayerRow({ name = "", caisses = 1, locked = false } = {}) {
   row.className = locked ? "player-row locked" : "player-row";
   if (locked) row.dataset.locked = "true";
 
-  const caissesTitle = roundMode ? "Caisses this round" : "Caisses";
+  const caissesTitle = state.roundMode ? "Caisses this round" : "Caisses";
   const nameHtml = locked
-    ? `<span class="player-name-label">${name}</span>`
-    : `<input type="text" class="name-input" placeholder="Player name" value="${name}" />`;
-  const removeBtnHtml = locked ? "" : `<button type="button" class="remove-btn hidden" title="Remove player">&minus;</button>`;
+    ? `<span class="player-name-label">${escapeHtml(name)}</span>`
+    : `<input type="text" class="name-input" placeholder="Player name" value="${escapeHtml(name)}" />`;
+  const removeBtnHtml = locked
+    ? ""
+    : `<button type="button" class="remove-btn hidden" title="Remove player" aria-label="Remove player">&minus;</button>`;
 
   row.innerHTML = `
     ${nameHtml}
     <div class="stepper">
-      <button type="button" class="step-btn step-minus" title="Decrease caisses">&minus;</button>
+      <button type="button" class="step-btn step-minus" title="Decrease caisses" aria-label="Decrease caisses">&minus;</button>
       <input type="number" class="caisses-input" min="0" value="${caisses}" title="${caissesTitle}" />
-      <button type="button" class="step-btn step-plus" title="Increase caisses">+</button>
+      <button type="button" class="step-btn step-plus" title="Increase caisses" aria-label="Increase caisses">+</button>
     </div>
     ${removeBtnHtml}
   `;
@@ -330,7 +347,7 @@ function stepCaisses(input, delta) {
 
 function removePlayerRow(row) {
   if (row.dataset.locked) return;
-  if (!roundMode) {
+  if (!state.roundMode) {
     const rows = playerRows.querySelectorAll(".player-row");
     if (rows.length <= MIN_PLAYERS) return;
   }
@@ -340,29 +357,18 @@ function removePlayerRow(row) {
 
 function updateRemoveButtons() {
   const rows = Array.from(playerRows.querySelectorAll(".player-row"));
-  if (roundMode) {
-    rows.forEach((row) => {
-      if (row.dataset.locked) return;
-      const btn = row.querySelector(".remove-btn");
-      if (btn) btn.classList.remove("hidden");
-    });
-  } else {
-    const showRemove = rows.length >= 3;
-    rows.forEach((row) => {
-      const btn = row.querySelector(".remove-btn");
-      if (btn) btn.classList.toggle("hidden", !showRemove);
-    });
-  }
+  const showRemove = rows.length >= 3;
+  setRemoveButtonsVisible(rows, (row) => (state.roundMode ? !row.dataset.locked : showRemove));
 }
 
 // ---------- New round ----------
 
 function startNewRound(game) {
   if (!game) return;
-  currentGame = game;
-  chipConfig = game.chipConfig;
-  roundMode = true;
-  lastChipRowsKey = null;
+  state.currentGame = game;
+  state.chipConfig = game.chipConfig;
+  state.roundMode = true;
+  state.lastChipRowsKey = null;
   playerRows.innerHTML = "";
   game.players.forEach((p) => addPlayerRow({ name: p.name, caisses: 0, locked: true }));
   updatePlayersHint();
@@ -376,14 +382,20 @@ function goToChipsStep() {
 
   for (const row of rows) {
     const caissesInput = row.querySelector(".caisses-input");
-    if (parseInt(caissesInput.value, 10) < 0) {
+    const caisses = parseInt(caissesInput.value, 10);
+    if (caisses < 0) {
       alert("Caisses can't be negative. Please enter 0 or more.");
+      caissesInput.focus();
+      return;
+    }
+    if (!(caisses > 0)) {
+      alert("Every player needs at least 1 caisse. Please update the count before continuing.");
       caissesInput.focus();
       return;
     }
   }
 
-  players = [];
+  state.players = [];
   rows.forEach((row, i) => {
     const nameInput = row.querySelector(".name-input");
     const label = row.querySelector(".player-name-label");
@@ -391,17 +403,17 @@ function goToChipsStep() {
     const roundCaisses = parseInt(row.querySelector(".caisses-input").value, 10) || 0;
 
     let totalCaisses = roundCaisses;
-    if (roundMode) {
-      const existing = currentGame.players.find((p) => p.name === name);
+    if (state.roundMode) {
+      const existing = state.currentGame.players.find((p) => p.name === name);
       totalCaisses = (existing ? existing.totalCaisses : 0) + roundCaisses;
     }
-    players.push({ name, caisses: totalCaisses, roundCaisses });
+    state.players.push({ name, caisses: totalCaisses, roundCaisses });
   });
 
-  const key = players.map((p) => p.name).join("|");
-  if (key !== lastChipRowsKey) {
+  const key = state.players.map((p) => p.name).join("|");
+  if (key !== state.lastChipRowsKey) {
     buildChipRows();
-    lastChipRowsKey = key;
+    state.lastChipRowsKey = key;
   }
   chipsWarningBanner.classList.add("hidden");
   showStep(stepChips);
@@ -409,12 +421,12 @@ function goToChipsStep() {
 
 function buildChipRows() {
   chipRows.innerHTML = "";
-  players.forEach((player, i) => {
+  state.players.forEach((player, i) => {
     const card = document.createElement("div");
     card.className = "chip-card";
     card.dataset.playerIndex = i;
 
-    const inputsHtml = chipConfig.types.map(
+    const inputsHtml = state.chipConfig.types.map(
       (type, j) => `
         <div>
           <label>${type.label}</label>
@@ -423,7 +435,7 @@ function buildChipRows() {
     ).join("");
 
     card.innerHTML = `
-      <div class="chip-name">${player.name}</div>
+      <div class="chip-name">${escapeHtml(player.name)}</div>
       <div class="chip-inputs">${inputsHtml}</div>
       <div class="chip-total">Value: $0.00</div>
     `;
@@ -448,7 +460,7 @@ function getChipTotalFromCard(card) {
   chipInputs.forEach((input) => {
     const idx = parseInt(input.dataset.chipIndex, 10);
     const count = parseInt(input.value, 10) || 0;
-    total += count * chipConfig.types[idx].value;
+    total += count * state.chipConfig.types[idx].value;
   });
   return total;
 }
@@ -459,19 +471,15 @@ function attemptCalculate() {
   const cards = chipRows.querySelectorAll(".chip-card");
   let totalRoundCaisses = 0;
   let totalChipValue = 0;
-  players.forEach((player, i) => {
+  state.players.forEach((player, i) => {
     totalRoundCaisses += player.roundCaisses;
     totalChipValue += getChipTotalFromCard(cards[i]);
   });
 
-  const expected = totalRoundCaisses * chipConfig.caisseFaceValue;
-  const diff = Math.round((totalChipValue - expected) * 100) / 100;
+  const { isOff, message } = computeChipDiscrepancy(totalRoundCaisses, totalChipValue, state.chipConfig.caisseFaceValue);
 
-  if (Math.abs(diff) > 0.001) {
-    chipsWarningBanner.textContent =
-      `Warning: chips on the table ($${totalChipValue.toFixed(2)}) don't match ` +
-      `expected total from this round's caisses ($${expected.toFixed(2)}). Off by $${diff > 0 ? "+" : ""}${diff.toFixed(2)}. ` +
-      `Fix the counts before calculating.`;
+  if (isOff) {
+    chipsWarningBanner.textContent = `${message} Fix the counts before calculating.`;
     chipsWarningBanner.classList.remove("hidden");
     return;
   }
@@ -482,17 +490,17 @@ function attemptCalculate() {
 
 function calculateAndShowResults() {
   const cards = chipRows.querySelectorAll(".chip-card");
-  const results = players.map((player, i) => {
+  const results = state.players.map((player, i) => {
     const card = cards[i];
     const chipFaceValue = getChipTotalFromCard(card); // this round's ending pot
-    const paidIn = player.caisses * chipConfig.realPerCaisse; // lifetime paid in (informational)
-    const finalReal = chipFaceValue * (chipConfig.realPerCaisse / chipConfig.caisseFaceValue); // this round's pot in real $
+    const paidIn = player.caisses * state.chipConfig.realPerCaisse; // lifetime paid in (informational)
+    const finalReal = chipValueToReal(chipFaceValue, state.chipConfig); // this round's pot in real $
 
     // Net is a running score: each round's own (potReal - potPaidIn) adds to whatever
     // was carried over, since chips reset every round and don't carry real value forward.
-    const roundPaidIn = player.roundCaisses * chipConfig.realPerCaisse;
+    const roundPaidIn = player.roundCaisses * state.chipConfig.realPerCaisse;
     const roundNet = finalReal - roundPaidIn;
-    const existing = currentGame && currentGame.players.find((p) => p.name === player.name);
+    const existing = state.currentGame && state.currentGame.players.find((p) => p.name === player.name);
     const net = (existing ? existing.cumulativeNet : 0) + roundNet;
 
     return {
@@ -510,33 +518,34 @@ function calculateAndShowResults() {
 
   commitResultsToGame(results);
 
-  resultPages = buildResultPages(currentGame);
-  showResultsPage(resultPages.length - 1); // land on Total
+  state.resultPages = buildResultPages(state.currentGame);
+  showResultsPage(state.resultPages.length - 1); // land on Total
 
   showStep(stepResults);
 }
 
 function commitResultsToGame(results) {
-  if (!currentGame) {
-    currentGame = {
+  if (!state.currentGame) {
+    state.currentGame = {
       id: generateId(),
       createdAt: Date.now(),
-      chipConfig,
+      schemaVersion: SCHEMA_VERSION,
+      chipConfig: state.chipConfig,
       players: [],
       rounds: [],
       roundNumber: 0,
     };
   }
-  currentGame.chipConfig = chipConfig;
-  currentGame.players = results.map((r) => ({
+  state.currentGame.chipConfig = state.chipConfig;
+  state.currentGame.players = results.map((r) => ({
     name: r.name,
     totalCaisses: r.caisses,
     lastChipValue: r.chipFaceValue,
     lastRoundCaisses: r.roundCaisses,
     cumulativeNet: r.net,
   }));
-  if (!currentGame.rounds) currentGame.rounds = [];
-  currentGame.rounds.push({
+  if (!state.currentGame.rounds) state.currentGame.rounds = [];
+  state.currentGame.rounds.push({
     players: results.map((r) => ({
       name: r.name,
       caisses: r.roundCaisses,
@@ -546,14 +555,11 @@ function commitResultsToGame(results) {
       net: r.roundNet,
     })),
   });
-  currentGame.roundNumber = (currentGame.roundNumber || 0) + 1;
-  currentGame.updatedAt = Date.now();
+  state.currentGame.roundNumber = (state.currentGame.roundNumber || 0) + 1;
+  state.currentGame.updatedAt = Date.now();
 }
 
 // ---------- Results pager (Round 1, Round 2, ..., Results) ----------
-
-let resultPages = [];
-let currentPageIndex = 0;
 
 function buildTotalResultsPage(game, label) {
   return {
@@ -563,7 +569,7 @@ function buildTotalResultsPage(game, label) {
       caisses: p.totalCaisses,
       paidIn: p.totalCaisses * game.chipConfig.realPerCaisse,
       chipFaceValue: p.lastChipValue,
-      finalReal: p.lastChipValue * (game.chipConfig.realPerCaisse / game.chipConfig.caisseFaceValue),
+      finalReal: chipValueToReal(p.lastChipValue, game.chipConfig),
       net: p.cumulativeNet,
     })),
     showWarning: false,
@@ -595,17 +601,17 @@ function buildResultPages(game) {
 }
 
 function showResultsPage(index) {
-  if (resultPages.length === 0) return;
-  currentPageIndex = ((index % resultPages.length) + resultPages.length) % resultPages.length;
-  const page = resultPages[currentPageIndex];
+  if (state.resultPages.length === 0) return;
+  state.currentPageIndex = ((index % state.resultPages.length) + state.resultPages.length) % state.resultPages.length;
+  const page = state.resultPages[state.currentPageIndex];
 
   document.getElementById("page-label").textContent = page.label;
-  const showArrows = resultPages.length > 1;
+  const showArrows = state.resultPages.length > 1;
   document.getElementById("btn-page-prev").classList.toggle("hidden", !showArrows);
   document.getElementById("btn-page-next").classList.toggle("hidden", !showArrows);
 
   if (page.showWarning) {
-    renderWarning(page.warningCaisses, page.warningChipValue, currentGame.chipConfig.caisseFaceValue);
+    renderWarning(page.warningCaisses, page.warningChipValue, state.currentGame.chipConfig.caisseFaceValue);
   } else {
     warningBanner.classList.add("hidden");
   }
@@ -614,18 +620,14 @@ function showResultsPage(index) {
 }
 
 function renderResultsFromGame(game) {
-  resultPages = buildResultPages(game);
-  showResultsPage(resultPages.length - 1); // land on Total
+  state.resultPages = buildResultPages(game);
+  showResultsPage(state.resultPages.length - 1); // land on Total
 }
 
 function renderWarning(totalRoundCaisses, totalChipValue, caisseFaceValue) {
-  const expected = totalRoundCaisses * caisseFaceValue;
-  const diff = Math.round((totalChipValue - expected) * 100) / 100;
-
-  if (Math.abs(diff) > 0.001) {
-    warningBanner.textContent =
-      `Warning: chips on the table ($${totalChipValue.toFixed(2)}) don't match ` +
-      `expected total from this round's caisses ($${expected.toFixed(2)}). Off by $${diff > 0 ? "+" : ""}${diff.toFixed(2)}.`;
+  const { isOff, message } = computeChipDiscrepancy(totalRoundCaisses, totalChipValue, caisseFaceValue);
+  if (isOff) {
+    warningBanner.textContent = message;
     warningBanner.classList.remove("hidden");
   } else {
     warningBanner.classList.add("hidden");
@@ -639,7 +641,7 @@ function renderResultsTable(results) {
     const netClass = r.net >= 0 ? "positive" : "negative";
     const netSign = r.net >= 0 ? "+" : "-";
     tr.innerHTML = `
-      <td>${r.name}</td>
+      <td>${escapeHtml(r.name)}</td>
       <td>${r.caisses}</td>
       <td>$${r.paidIn.toFixed(2)}</td>
       <td>$${r.finalReal.toFixed(2)}</td>
@@ -647,37 +649,6 @@ function renderResultsTable(results) {
     `;
     resultsBody.appendChild(tr);
   });
-}
-
-function simplifyDebts(results) {
-  const creditors = [];
-  const debtors = [];
-
-  results.forEach((r) => {
-    const amt = Math.round(r.net * 100) / 100;
-    if (amt > 0.001) creditors.push({ name: r.name, amount: amt });
-    else if (amt < -0.001) debtors.push({ name: r.name, amount: -amt });
-  });
-
-  creditors.sort((a, b) => b.amount - a.amount);
-  debtors.sort((a, b) => b.amount - a.amount);
-
-  const transactions = [];
-  let i = 0;
-  let j = 0;
-  while (i < debtors.length && j < creditors.length) {
-    const debtor = debtors[i];
-    const creditor = creditors[j];
-    const pay = Math.min(debtor.amount, creditor.amount);
-    transactions.push({ from: debtor.name, to: creditor.name, amount: Math.round(pay * 100) / 100 });
-
-    debtor.amount -= pay;
-    creditor.amount -= pay;
-    if (debtor.amount < 0.001) i++;
-    if (creditor.amount < 0.001) j++;
-  }
-
-  return transactions;
 }
 
 function renderSettlement(results) {
@@ -693,7 +664,7 @@ function renderSettlement(results) {
 
   transactions.forEach((t) => {
     const li = document.createElement("li");
-    li.innerHTML = `${t.from} pays <strong>${t.to}</strong>: $${t.amount.toFixed(2)}`;
+    li.innerHTML = `${escapeHtml(t.from)} pays <strong>${escapeHtml(t.to)}</strong>: $${t.amount.toFixed(2)}`;
     settlementList.appendChild(li);
   });
 }
@@ -701,7 +672,7 @@ function renderSettlement(results) {
 // ---------- Close ----------
 
 function closeCurrentGame() {
-  if (currentGame) upsertGame(currentGame);
+  if (state.currentGame) upsertGame(state.currentGame);
   goHome();
 }
 

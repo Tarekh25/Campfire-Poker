@@ -1,8 +1,11 @@
-const CACHE_NAME = "campfire-poker-v7";
+// __BUILD_ID__ is replaced with the deploy commit SHA by the GitHub Actions
+// workflow, so a fresh cache is picked up automatically on every deploy.
+const CACHE_NAME = "campfire-poker-__BUILD_ID__";
 const ASSETS = [
   "./",
   "./index.html",
   "./style.css",
+  "./calc.js",
   "./script.js",
   "./manifest.json",
   "./icons/icon-192.png",

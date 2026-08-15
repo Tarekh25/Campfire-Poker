@@ -1,0 +1,7 @@
+{
+  "name": "campfire-poker",
+  "private": true,
+  "scripts": {
+    "test": "node --test app/*.test.js"
+  }
+}
